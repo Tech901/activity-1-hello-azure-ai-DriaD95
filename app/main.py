@@ -44,14 +44,13 @@ def _get_openai_client():
     """Lazily initialize the Azure OpenAI client."""
     global _openai_client
     if _openai_client is None:
-        # TODO: Uncomment and configure
-        #   from openai import AzureOpenAI
-        #   _openai_client = AzureOpenAI(
-        #       azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-        #       api_key=os.environ["AZURE_OPENAI_API_KEY"],
-        #       api_version="2024-10-21",
-        #   )
-        raise NotImplementedError("Configure the Azure OpenAI client")
+        # Uncomment and configure
+        from openai import AzureOpenAI
+        _openai_client = AzureOpenAI(
+            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_version="2024-10-21",
+        )
     return _openai_client
 
 
@@ -90,7 +89,7 @@ def _get_language_client():
 
 
 # ---------------------------------------------------------------------------
-# TODO: Step 1 - Classify a 311 request with Azure OpenAI
+# Step 1 - Classify a 311 request with Azure OpenAI
 # ---------------------------------------------------------------------------
 def classify_311_request(request_text: str) -> dict:
     """Send a Memphis 311 service request to Azure OpenAI for classification.
@@ -101,16 +100,33 @@ def classify_311_request(request_text: str) -> dict:
     Returns:
         dict with keys: category, confidence, reasoning
     """
-    # TODO: Step 1.1 - Get the OpenAI client
-    # TODO: Step 1.2 - Call client.chat.completions.create() with:
+    # Step 1.1 - Get the OpenAI client
+    client = _get_openai_client()
+    # Step 1.2 - Call client.chat.completions.create() with:
     #   model=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
     #   A system message that classifies into: Pothole, Noise Complaint,
     #   Trash/Litter, Street Light, Water/Sewer, Other
     #   response_format={"type": "json_object"}, temperature=0
-    # TODO: Step 1.3 - Parse the JSON response with json.loads()
-    raise NotImplementedError("Implement classify_311_request in Step 1")
-
-
+    response = client.chat.completions.create(
+        model=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
+        messages=[{
+            "role": "system",
+            "content": "Classify the following Memphis 311 request into one of the following categories: "
+            "Pothole, Noise Complaint, Trash/Litter, Street Light, Water/Sewer, Other. "
+            "Respond with a JSON object with keys: category, confidence, reasoning"
+        }, 
+        {"role": "user", "content": request_text}],
+        response_format={"type": "json_object"},
+        temperature=0
+    )
+    # Step 1.3 - Parse the JSON response with json.loads()
+    print(f"OpenAI response: {response.choices[0].message.content}")
+    parsed_response = json.loads(response.choices[0].message.content)
+    return {
+        "category": parsed_response.get("category"),
+        "confidence": parsed_response.get("confidence"),
+        "reasoning": parsed_response.get("reasoning"),
+    }
 # ---------------------------------------------------------------------------
 # TODO: Step 2 - Check content safety
 # ---------------------------------------------------------------------------
