@@ -17,6 +17,7 @@ import sys
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
+from azure.ai.contentsafety.models import AnalyzeTextOptions, AnalyzeTextResult, TextCategory
 
 load_dotenv()
 
@@ -60,14 +61,12 @@ def _get_content_safety_client():
     if _content_safety_client is None:
         # NOTE: The Content Safety SDK handles API versioning internally --
         # no api_version parameter is needed (unlike the OpenAI SDK).
-        # TODO: Uncomment and configure
-        #   from azure.ai.contentsafety import ContentSafetyClient
-        #   from azure.core.credentials import AzureKeyCredential
-        #   _content_safety_client = ContentSafetyClient(
-        #       endpoint=os.environ["AZURE_CONTENT_SAFETY_ENDPOINT"],
-        #       credential=AzureKeyCredential(os.environ["AZURE_CONTENT_SAFETY_KEY"]),
-        #   )
-        raise NotImplementedError("Configure the Content Safety client")
+        from azure.ai.contentsafety import ContentSafetyClient
+        from azure.core.credentials import AzureKeyCredential
+        _content_safety_client = ContentSafetyClient(
+            endpoint=os.environ["AZURE_CONTENT_SAFETY_ENDPOINT"],
+            credential=AzureKeyCredential(os.environ["AZURE_CONTENT_SAFETY_KEY"]),
+        )
     return _content_safety_client
 
 
@@ -128,7 +127,7 @@ def classify_311_request(request_text: str) -> dict:
         "reasoning": parsed_response.get("reasoning"),
     }
 # ---------------------------------------------------------------------------
-# TODO: Step 2 - Check content safety
+# Step 2 - Check content safety
 # ---------------------------------------------------------------------------
 def check_content_safety(text: str) -> dict:
     """Check text for harmful content using Azure Content Safety.
@@ -139,12 +138,24 @@ def check_content_safety(text: str) -> dict:
     Returns:
         dict with keys: safe (bool), categories (dict of category: severity)
     """
-    # TODO: Step 2.1 - Get the Content Safety client
+    # Step 2.1 - Get the Content Safety client
+    client = _get_content_safety_client()
     # TODO: Step 2.2 - Call client.analyze_text() with AnalyzeTextOptions
-    # TODO: Step 2.3 - Return safety results
-    raise NotImplementedError("Implement check_content_safety in Step 2")
-
-
+    request = AnalyzeTextOptions(
+        text=text,
+        categories=[
+            TextCategory.HATE,
+            TextCategory.VIOLENCE,
+            TextCategory.SELF_HARM,
+            TextCategory.SEXUAL,
+        ]
+    )
+    result = client.analyze_text(request)
+    # Step 2.3 - Return safety results
+    return {
+        "safe": all(cat["severity"] == 0 for cat in result.categories_analysis),
+        "categories": {cat["category"]: cat["severity"] for cat in result.categories_analysis}
+    }
 # ---------------------------------------------------------------------------
 # TODO: Step 3 - Extract key phrases
 # ---------------------------------------------------------------------------
