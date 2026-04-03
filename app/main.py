@@ -17,6 +17,7 @@ import sys
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
+from azure.ai.contentsafety.models import AnalyzeTextOptions, AnalyzeTextResult, TextCategory
 
 load_dotenv()
 
@@ -44,14 +45,13 @@ def _get_openai_client():
     """Lazily initialize the Azure OpenAI client."""
     global _openai_client
     if _openai_client is None:
-        # TODO: Uncomment and configure
-        #   from openai import AzureOpenAI
-        #   _openai_client = AzureOpenAI(
-        #       azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
-        #       api_key=os.environ["AZURE_OPENAI_API_KEY"],
-        #       api_version="2024-10-21",
-        #   )
-        raise NotImplementedError("Configure the Azure OpenAI client")
+        # Uncomment and configure
+        from openai import AzureOpenAI
+        _openai_client = AzureOpenAI(
+            azure_endpoint=os.environ["AZURE_OPENAI_ENDPOINT"],
+            api_key=os.environ["AZURE_OPENAI_API_KEY"],
+            api_version="2024-10-21",
+        )
     return _openai_client
 
 
@@ -61,14 +61,12 @@ def _get_content_safety_client():
     if _content_safety_client is None:
         # NOTE: The Content Safety SDK handles API versioning internally --
         # no api_version parameter is needed (unlike the OpenAI SDK).
-        # TODO: Uncomment and configure
-        #   from azure.ai.contentsafety import ContentSafetyClient
-        #   from azure.core.credentials import AzureKeyCredential
-        #   _content_safety_client = ContentSafetyClient(
-        #       endpoint=os.environ["AZURE_CONTENT_SAFETY_ENDPOINT"],
-        #       credential=AzureKeyCredential(os.environ["AZURE_CONTENT_SAFETY_KEY"]),
-        #   )
-        raise NotImplementedError("Configure the Content Safety client")
+        from azure.ai.contentsafety import ContentSafetyClient
+        from azure.core.credentials import AzureKeyCredential
+        _content_safety_client = ContentSafetyClient(
+            endpoint=os.environ["AZURE_CONTENT_SAFETY_ENDPOINT"],
+            credential=AzureKeyCredential(os.environ["AZURE_CONTENT_SAFETY_KEY"]),
+        )
     return _content_safety_client
 
 
@@ -78,19 +76,18 @@ def _get_language_client():
     if _language_client is None:
         # NOTE: The Language SDK handles API versioning internally --
         # no api_version parameter is needed (unlike the OpenAI SDK).
-        # TODO: Uncomment and configure
-        #   from azure.ai.textanalytics import TextAnalyticsClient
-        #   from azure.core.credentials import AzureKeyCredential
-        #   _language_client = TextAnalyticsClient(
-        #       endpoint=os.environ["AZURE_AI_LANGUAGE_ENDPOINT"],
-        #       credential=AzureKeyCredential(os.environ["AZURE_AI_LANGUAGE_KEY"]),
-        #   )
-        raise NotImplementedError("Configure the AI Language client")
+        # Uncomment and configure
+        from azure.ai.textanalytics import TextAnalyticsClient
+        from azure.core.credentials import AzureKeyCredential
+        _language_client = TextAnalyticsClient(
+            endpoint=os.environ["AZURE_AI_LANGUAGE_ENDPOINT"],
+            credential=AzureKeyCredential(os.environ["AZURE_AI_LANGUAGE_KEY"]),
+        )
     return _language_client
 
 
 # ---------------------------------------------------------------------------
-# TODO: Step 1 - Classify a 311 request with Azure OpenAI
+# Step 1 - Classify a 311 request with Azure OpenAI
 # ---------------------------------------------------------------------------
 def classify_311_request(request_text: str) -> dict:
     """Send a Memphis 311 service request to Azure OpenAI for classification.
@@ -101,18 +98,35 @@ def classify_311_request(request_text: str) -> dict:
     Returns:
         dict with keys: category, confidence, reasoning
     """
-    # TODO: Step 1.1 - Get the OpenAI client
-    # TODO: Step 1.2 - Call client.chat.completions.create() with:
+    # Step 1.1 - Get the OpenAI client
+    client = _get_openai_client()
+    # Step 1.2 - Call client.chat.completions.create() with:
     #   model=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o")
     #   A system message that classifies into: Pothole, Noise Complaint,
     #   Trash/Litter, Street Light, Water/Sewer, Other
     #   response_format={"type": "json_object"}, temperature=0
-    # TODO: Step 1.3 - Parse the JSON response with json.loads()
-    raise NotImplementedError("Implement classify_311_request in Step 1")
-
-
+    response = client.chat.completions.create(
+        model=os.environ.get("AZURE_OPENAI_DEPLOYMENT", "gpt-4o"),
+        messages=[{
+            "role": "system",
+            "content": "Classify the following Memphis 311 request into one of the following categories: "
+            "Pothole, Noise Complaint, Trash/Litter, Street Light, Water/Sewer, Other. "
+            "Respond with a JSON object with keys: category, confidence, reasoning"
+        }, 
+        {"role": "user", "content": request_text}],
+        response_format={"type": "json_object"},
+        temperature=0
+    )
+    # Step 1.3 - Parse the JSON response with json.loads()
+    print(f"OpenAI response: {response.choices[0].message.content}")
+    parsed_response = json.loads(response.choices[0].message.content)
+    return {
+        "category": parsed_response.get("category"),
+        "confidence": parsed_response.get("confidence"),
+        "reasoning": parsed_response.get("reasoning"),
+    }
 # ---------------------------------------------------------------------------
-# TODO: Step 2 - Check content safety
+# Step 2 - Check content safety
 # ---------------------------------------------------------------------------
 def check_content_safety(text: str) -> dict:
     """Check text for harmful content using Azure Content Safety.
@@ -123,12 +137,24 @@ def check_content_safety(text: str) -> dict:
     Returns:
         dict with keys: safe (bool), categories (dict of category: severity)
     """
-    # TODO: Step 2.1 - Get the Content Safety client
-    # TODO: Step 2.2 - Call client.analyze_text() with AnalyzeTextOptions
-    # TODO: Step 2.3 - Return safety results
-    raise NotImplementedError("Implement check_content_safety in Step 2")
-
-
+    # Step 2.1 - Get the Content Safety client
+    client = _get_content_safety_client()
+    # Step 2.2 - Call client.analyze_text() with AnalyzeTextOptions
+    request = AnalyzeTextOptions(
+        text=text,
+        categories=[
+            TextCategory.HATE,
+            TextCategory.VIOLENCE,
+            TextCategory.SELF_HARM,
+            TextCategory.SEXUAL,
+        ]
+    )
+    result = client.analyze_text(request)
+    # Step 2.3 - Return safety results
+    return {
+        "safe": all(cat["severity"] == 0 for cat in result.categories_analysis),
+        "categories": {cat["category"]: cat["severity"] for cat in result.categories_analysis}
+    }
 # ---------------------------------------------------------------------------
 # TODO: Step 3 - Extract key phrases
 # ---------------------------------------------------------------------------
@@ -141,11 +167,14 @@ def extract_key_phrases(text: str) -> list[str]:
     Returns:
         List of key phrase strings.
     """
-    # TODO: Step 3.1 - Get the Language client
+    # Step 3.1 - Get the Language client
+    client = _get_language_client()
     # TODO: Step 3.2 - Call client.extract_key_phrases([text])
+    response = client.extract_key_phrases([text])
     # TODO: Step 3.3 - Return the list of key phrases
-    raise NotImplementedError("Implement extract_key_phrases in Step 3")
-
+    if response and not response[0].is_error:
+        return response[0].key_phrases
+    return []
 
 def main():
     """Main function -- call all three Azure AI services."""
